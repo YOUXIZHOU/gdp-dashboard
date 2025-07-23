@@ -1,151 +1,177 @@
-import streamlit as st
+"""
+Streamlit Dictionary‑Based Text Classifier 🎈
+
+This app lets users:
+1. Upload a CSV file containing a text column (default **Statement**).
+2. Edit or extend the dictionary‑based classification rules (category → phrases).
+3. Run classification right in the browser.
+4. Download the enriched CSV.
+
+Converted from the standalone script `dictionary_classifier.py` on 2025‑07‑22.
+"""
+
+from __future__ import annotations
+
+import ast
+import json
+from io import StringIO
+from typing import Any, Dict, List, Set
+
 import pandas as pd
-import math
-from pathlib import Path
+import streamlit as st
 
-# Set the title and favicon that appear in the Browser's tab bar.
-st.set_page_config(
-    page_title='GDP dashboard',
-    page_icon=':earth_americas:', # This is an emoji shortcode. Could be a URL too.
-)
+################################################################################
+# 🗂️ Default classification dictionaries (feel free to extend in the sidebar) #
+################################################################################
+DEFAULT_DICTIONARIES: Dict[str, Set[str]] = {
+    "urgency_marketing": {
+        "limited",
+        "limited time",
+        "limited run",
+        "limited edition",
+        "order now",
+        "last chance",
+        "hurry",
+        "while supplies last",
+        "before they're gone",
+        "selling out",
+        "selling fast",
+        "act now",
+        "don't wait",
+        "today only",
+        "expires soon",
+        "final hours",
+        "almost gone",
+    },
+    "exclusive_marketing": {
+        "exclusive",
+        "exclusively",
+        "exclusive offer",
+        "exclusive deal",
+        "members only",
+        "vip",
+        "special access",
+        "invitation only",
+        "premium",
+        "privileged",
+        "limited access",
+        "select customers",
+        "insider",
+        "private sale",
+        "early access",
+    },
+}
 
-# -----------------------------------------------------------------------------
-# Declare some useful functions.
+################################################################################
+# 🔧 Utility functions                                                           #
+################################################################################
 
-@st.cache_data
-def get_gdp_data():
-    """Grab GDP data from a CSV file.
+def parse_dictionaries(input_text: str) -> Dict[str, Set[str]]:
+    """Safely parse the user's dictionary (Python literal)."""
+    if not input_text.strip():
+        return DEFAULT_DICTIONARIES
 
-    This uses caching to avoid having to read the file every time. If we were
-    reading from an HTTP endpoint instead of a file, it's a good idea to set
-    a maximum age to the cache with the TTL argument: @st.cache_data(ttl='1d')
-    """
+    try:
+        data: Any = ast.literal_eval(input_text)
+        if not isinstance(data, dict):
+            raise ValueError("Parsed object is not a dict.")
+        parsed: Dict[str, Set[str]] = {k: set(v) for k, v in data.items()}
+        return parsed
+    except Exception as exc:  # noqa: BLE001
+        st.error(f"❌ Failed to parse dictionaries: {exc}")
+        st.stop()
 
-    # Instead of a CSV on disk, you could read from an HTTP endpoint here too.
-    DATA_FILENAME = Path(__file__).parent/'data/gdp_data.csv'
-    raw_gdp_df = pd.read_csv(DATA_FILENAME)
 
-    MIN_YEAR = 1960
-    MAX_YEAR = 2022
+def has_phrase(text: str, phrases: Set[str]) -> bool:
+    """Return **True** if any phrase appears in *text* (case‑insensitive)."""
+    return any(p in text for p in phrases)
 
-    # The data above has columns like:
-    # - Country Name
-    # - Country Code
-    # - [Stuff I don't care about]
-    # - GDP for 1960
-    # - GDP for 1961
-    # - GDP for 1962
-    # - ...
-    # - GDP for 2022
-    #
-    # ...but I want this instead:
-    # - Country Name
-    # - Country Code
-    # - Year
-    # - GDP
-    #
-    # So let's pivot all those year-columns into two: Year and GDP
-    gdp_df = raw_gdp_df.melt(
-        ['Country Code'],
-        [str(x) for x in range(MIN_YEAR, MAX_YEAR + 1)],
-        'Year',
-        'GDP',
+
+def classify(text: str, dictionaries: Dict[str, Set[str]]) -> List[str]:
+    """Return all dictionary keys matched in *text*."""
+    text = str(text).lower()
+    return [cat for cat, phrases in dictionaries.items() if has_phrase(text, phrases)]
+
+################################################################################
+# 🚀 Streamlit app                                                              #
+################################################################################
+
+def main() -> None:  # noqa: D401 – imperative mood intentional
+    st.set_page_config(
+        page_title="Dictionary‑Based Text Classifier",
+        page_icon="📚",
+        layout="wide",
     )
 
-    # Convert years from string to integers
-    gdp_df['Year'] = pd.to_numeric(gdp_df['Year'])
+    st.title("📚 Dictionary‑Based Text Classifier")
+    st.write(
+        "Upload a CSV, edit the dictionaries in the sidebar, and click **Classify** to "
+        "add category labels to your data."
+    )
 
-    return gdp_df
+    # Sidebar – data input
+    st.sidebar.header("1️⃣ Upload your dataset")
+    uploaded_file = st.sidebar.file_uploader(
+        "CSV file", type=["csv"], key="csv_uploader"
+    )
+    column_name = st.sidebar.text_input("Text column name", value="Statement")
 
-gdp_df = get_gdp_data()
+    # Sidebar – dictionary editing
+    st.sidebar.header("2️⃣ Edit classification dictionaries")
+    dict_text = st.sidebar.text_area(
+        "Python dict (category -> list / set of phrases)",
+        value=json.dumps(DEFAULT_DICTIONARIES, indent=2),
+        height=300,
+    )
+    dictionaries = parse_dictionaries(dict_text)
 
-# -----------------------------------------------------------------------------
-# Draw the actual page
+    # Main area
+    if uploaded_file is None:
+        st.info("👈 Upload a CSV file to get started.")
+        return
 
-# Set the title that appears at the top of the page.
-'''
-# :earth_americas: GDP dashboard
+    # Read CSV into DataFrame
+    try:
+        df = pd.read_csv(uploaded_file)
+    except Exception as exc:  # noqa: BLE001
+        st.error(f"❌ Could not read CSV: {exc}")
+        return
 
-Browse GDP data from the [World Bank Open Data](https://data.worldbank.org/) website. As you'll
-notice, the data only goes to 2022 right now, and datapoints for certain years are often missing.
-But it's otherwise a great (and did I mention _free_?) source of data.
-'''
+    if column_name not in df.columns:
+        st.error(f"❌ Column '{column_name}' not found in the uploaded CSV.")
+        return
 
-# Add some spacing
-''
-''
+    st.write("### 🔍 Data preview")
+    st.dataframe(df.head())
 
-min_value = gdp_df['Year'].min()
-max_value = gdp_df['Year'].max()
+    if st.button("🚀 Classify", use_container_width=True):
+        # Perform classification
+        with st.spinner("Classifying..."):
+            df["_text_lower"] = df[column_name].fillna("").str.lower()
+            df["labels"] = df["_text_lower"].apply(lambda t: classify(t, dictionaries))
 
-from_year, to_year = st.slider(
-    'Which years are you interested in?',
-    min_value=min_value,
-    max_value=max_value,
-    value=[min_value, max_value])
+            # Optional one‑hot columns
+            for cat in dictionaries:
+                df[cat] = df["_text_lower"].apply(
+                    lambda t, phrases=dictionaries[cat]: has_phrase(t, phrases)
+                )
 
-countries = gdp_df['Country Code'].unique()
+            df.drop(columns="_text_lower", inplace=True)
 
-if not len(countries):
-    st.warning("Select at least one country")
+        st.success("✅ Classification complete!")
+        st.write("### 📝 Classified data preview")
+        st.dataframe(df.head())
 
-selected_countries = st.multiselect(
-    'Which countries would you like to view?',
-    countries,
-    ['DEU', 'FRA', 'GBR', 'BRA', 'MEX', 'JPN'])
-
-''
-''
-''
-
-# Filter the data
-filtered_gdp_df = gdp_df[
-    (gdp_df['Country Code'].isin(selected_countries))
-    & (gdp_df['Year'] <= to_year)
-    & (from_year <= gdp_df['Year'])
-]
-
-st.header('GDP over time', divider='gray')
-
-''
-
-st.line_chart(
-    filtered_gdp_df,
-    x='Year',
-    y='GDP',
-    color='Country Code',
-)
-
-''
-''
-
-
-first_year = gdp_df[gdp_df['Year'] == from_year]
-last_year = gdp_df[gdp_df['Year'] == to_year]
-
-st.header(f'GDP in {to_year}', divider='gray')
-
-''
-
-cols = st.columns(4)
-
-for i, country in enumerate(selected_countries):
-    col = cols[i % len(cols)]
-
-    with col:
-        first_gdp = first_year[first_year['Country Code'] == country]['GDP'].iat[0] / 1000000000
-        last_gdp = last_year[last_year['Country Code'] == country]['GDP'].iat[0] / 1000000000
-
-        if math.isnan(first_gdp):
-            growth = 'n/a'
-            delta_color = 'off'
-        else:
-            growth = f'{last_gdp / first_gdp:,.2f}x'
-            delta_color = 'normal'
-
-        st.metric(
-            label=f'{country} GDP',
-            value=f'{last_gdp:,.0f}B',
-            delta=growth,
-            delta_color=delta_color
+        # Download section
+        csv_buffer = StringIO()
+        df.to_csv(csv_buffer, index=False)
+        st.download_button(
+            label="📥 Download classified CSV",
+            data=csv_buffer.getvalue(),
+            file_name="classified_data.csv",
+            mime="text/csv",
         )
+
+
+if __name__ == "__main__":
+    main()
