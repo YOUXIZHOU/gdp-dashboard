@@ -12,165 +12,116 @@ Converted from the standalone script `dictionary_classifier.py` on 2025‑07‑2
 
 from __future__ import annotations
 
-import ast
 import json
-from io import StringIO
-from typing import Any, Dict, List, Set
+import re
+from pathlib import Path
+from typing import Dict, List, Set, Union
 
 import pandas as pd
 import streamlit as st
 
 ################################################################################
-# 🗂️ Default classification dictionaries (feel free to extend in the sidebar) #
+# 🔧 Default dictionaries -------------------------------------------------------
 ################################################################################
-DEFAULT_DICTIONARIES: Dict[str, Set[str]] = {
-    "urgency_marketing": {
-        "limited",
-        "limited time",
-        "limited run",
-        "limited edition",
-        "order now",
-        "last chance",
-        "hurry",
-        "while supplies last",
-        "before they're gone",
-        "selling out",
-        "selling fast",
-        "act now",
-        "don't wait",
-        "today only",
-        "expires soon",
-        "final hours",
-        "almost gone",
-    },
-    "exclusive_marketing": {
-        "exclusive",
-        "exclusively",
-        "exclusive offer",
-        "exclusive deal",
-        "members only",
-        "vip",
-        "special access",
-        "invitation only",
-        "premium",
-        "privileged",
-        "limited access",
-        "select customers",
-        "insider",
-        "private sale",
-        "early access",
-    },
+
+# NOTE: We store values as **lists** (NOT sets) so the object is JSON‑serialisable
+DEFAULT_DICTIONARIES: Dict[str, List[str]] = {
+    "greeting": [
+        "hello",
+        "hi",
+        "good morning",
+        "good afternoon",
+        "good evening",
+    ],
+    "goodbye": [
+        "bye",
+        "goodbye",
+        "see you",
+    ],
+    "gratitude": [
+        "thank you",
+        "thanks",
+        "much appreciated",
+    ],
 }
 
 ################################################################################
-# 🔧 Utility functions                                                           #
+# 🏷️ Utility functions ---------------------------------------------------------
 ################################################################################
 
-def parse_dictionaries(input_text: str) -> Dict[str, Set[str]]:
-    """Safely parse the user's dictionary (Python literal)."""
-    if not input_text.strip():
-        return DEFAULT_DICTIONARIES
+def compile_patterns(dic: Dict[str, List[str]]) -> Dict[str, re.Pattern]:
+    """Pre‑compile regex OR‑patterns for each category."""
+    patterns: Dict[str, re.Pattern] = {}
+    for category, phrases in dic.items():
+        escaped = [re.escape(p.strip()) for p in phrases if p.strip()]
+        if not escaped:
+            continue
+        pattern = re.compile(r"(?:^|\b)(" + "|".join(escaped) + r")(?:$|\b)", re.IGNORECASE)
+        patterns[category] = pattern
+    return patterns
 
+
+def classify(text: str, patterns: Dict[str, re.Pattern]) -> str:
+    """Return the first category whose pattern matches *text*; else 'other'."""
+    for category, pat in patterns.items():
+        if pat.search(text):
+            return category
+    return "other"
+
+################################################################################
+# 🎈 Streamlit UI --------------------------------------------------------------
+################################################################################
+
+def main() -> None:
+    st.set_page_config(page_title="Dictionary Classifier", page_icon="🗂️", layout="centered")
+    st.title("🗂️ Dictionary‑Based Text Classifier")
+
+    # Sidebar ‑‑ dictionary editor
+    st.sidebar.header("🔧 Edit Dictionaries")
+    st.sidebar.markdown("Enter/modify a JSON object where *keys* are category names and *values* are **lists of phrases**.")
+
+    # Convert default dict to JSON string safely (lists are already JSON‑serialisable)
+    dict_str = json.dumps(DEFAULT_DICTIONARIES, indent=2, ensure_ascii=False)
+    dict_input = st.sidebar.text_area("Classification dictionary (JSON)", value=dict_str, height=300)
+
+    # Validate user JSON
     try:
-        data: Any = ast.literal_eval(input_text)
-        if not isinstance(data, dict):
-            raise ValueError("Parsed object is not a dict.")
-        parsed: Dict[str, Set[str]] = {k: set(v) for k, v in data.items()}
-        return parsed
-    except Exception as exc:  # noqa: BLE001
-        st.error(f"❌ Failed to parse dictionaries: {exc}")
+        user_dic_raw: Dict[str, Union[List[str], Set[str]]] = json.loads(dict_input)
+        # Ensure all values are lists of strings
+        user_dic: Dict[str, List[str]] = {}
+        for k, v in user_dic_raw.items():
+            if isinstance(v, (list, set, tuple)):
+                user_dic[k] = [str(x) for x in v]
+            else:
+                user_dic[k] = [str(v)]
+    except Exception as e:
+        st.sidebar.error(f"❌ Invalid JSON: {e}")
         st.stop()
 
+    patterns = compile_patterns(user_dic)
 
-def has_phrase(text: str, phrases: Set[str]) -> bool:
-    """Return **True** if any phrase appears in *text* (case‑insensitive)."""
-    return any(p in text for p in phrases)
+    # File uploader
+    st.header("📤 Upload CSV")
+    uploaded_file = st.file_uploader("Choose a CSV file", type=["csv"])
 
+    text_column = st.text_input("Name of the text column", value="Statement")
 
-def classify(text: str, dictionaries: Dict[str, Set[str]]) -> List[str]:
-    """Return all dictionary keys matched in *text*."""
-    text = str(text).lower()
-    return [cat for cat, phrases in dictionaries.items() if has_phrase(text, phrases)]
-
-################################################################################
-# 🚀 Streamlit app                                                              #
-################################################################################
-
-def main() -> None:  # noqa: D401 – imperative mood intentional
-    st.set_page_config(
-        page_title="Dictionary‑Based Text Classifier",
-        page_icon="📚",
-        layout="wide",
-    )
-
-    st.title("📚 Dictionary‑Based Text Classifier")
-    st.write(
-        "Upload a CSV, edit the dictionaries in the sidebar, and click **Classify** to "
-        "add category labels to your data."
-    )
-
-    # Sidebar – data input
-    st.sidebar.header("1️⃣ Upload your dataset")
-    uploaded_file = st.sidebar.file_uploader(
-        "CSV file", type=["csv"], key="csv_uploader"
-    )
-    column_name = st.sidebar.text_input("Text column name", value="Statement")
-
-    # Sidebar – dictionary editing
-    st.sidebar.header("2️⃣ Edit classification dictionaries")
-    dict_text = st.sidebar.text_area(
-        "Python dict (category -> list / set of phrases)",
-        value=json.dumps(DEFAULT_DICTIONARIES, indent=2),
-        height=300,
-    )
-    dictionaries = parse_dictionaries(dict_text)
-
-    # Main area
-    if uploaded_file is None:
-        st.info("👈 Upload a CSV file to get started.")
-        return
-
-    # Read CSV into DataFrame
-    try:
+    if uploaded_file:
         df = pd.read_csv(uploaded_file)
-    except Exception as exc:  # noqa: BLE001
-        st.error(f"❌ Could not read CSV: {exc}")
-        return
+        if text_column not in df.columns:
+            st.error(f"Column '{text_column}' not found in the uploaded file.")
+            st.stop()
 
-    if column_name not in df.columns:
-        st.error(f"❌ Column '{column_name}' not found in the uploaded CSV.")
-        return
-
-    st.write("### 🔍 Data preview")
-    st.dataframe(df.head())
-
-    if st.button("🚀 Classify", use_container_width=True):
-        # Perform classification
-        with st.spinner("Classifying..."):
-            df["_text_lower"] = df[column_name].fillna("").str.lower()
-            df["labels"] = df["_text_lower"].apply(lambda t: classify(t, dictionaries))
-
-            # Optional one‑hot columns
-            for cat in dictionaries:
-                df[cat] = df["_text_lower"].apply(
-                    lambda t, phrases=dictionaries[cat]: has_phrase(t, phrases)
-                )
-
-            df.drop(columns="_text_lower", inplace=True)
-
-        st.success("✅ Classification complete!")
-        st.write("### 📝 Classified data preview")
+        # Classification
+        st.header("🏷️ Classification Results")
+        df["predicted_category"] = df[text_column].astype(str).apply(lambda x: classify(x, patterns))
         st.dataframe(df.head())
 
-        # Download section
-        csv_buffer = StringIO()
-        df.to_csv(csv_buffer, index=False)
-        st.download_button(
-            label="📥 Download classified CSV",
-            data=csv_buffer.getvalue(),
-            file_name="classified_data.csv",
-            mime="text/csv",
-        )
+        # Download link
+        csv_out = df.to_csv(index=False).encode("utf‑8")
+        st.download_button("⬇️ Download classified CSV", csv_out, file_name="classified_output.csv", mime="text/csv")
+    else:
+        st.info("👆 Upload a CSV file to get started.")
 
 
 if __name__ == "__main__":
