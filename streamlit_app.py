@@ -47,7 +47,7 @@ DEFAULT_DICT = {
 st.sidebar.markdown(
     """
     **🔗 Related Tools**  
-    • [Dictionary Refinement](https://claude.ai/public/artifacts/f401602a-2504-4e8e-b906-a9bc484cee31)  
+    • [Dictionary Refinement](https://claude.ai/public/artifacts/664e281d-5501-4b2a-a944-5c8dfb98541b)  
     • [Classification](https://dictionary-classification-exuebwieyg4bj3xqkbkqkw.streamlit.app/)  
     • [Join table](https://claude.ai/public/artifacts/e6d1678e-eaaf-41db-8a18-16f89f778f36)  
     • [Word Metrics](https://word-metrics-bntqbb4mxfs7mhb6tgqyud.streamlit.app/)  
