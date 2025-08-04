@@ -78,6 +78,24 @@ st.sidebar.markdown(
     unsafe_allow_html=True,
 )
 
+# ──────────────────────────────  Context settings  ──────────────────────────────
+st.sidebar.markdown("---")
+st.sidebar.header("3️⃣  Context Options")
+
+use_context = st.sidebar.checkbox("Use rolling context window", value=True)
+
+if use_context:
+    window_size = st.sidebar.slider(
+        "Window size (number of sentences before/after)",
+        min_value=0,
+        max_value=5,
+        value=1,
+        step=1,
+        help="How many sentences before and after to include when classifying."
+    )
+else:
+    window_size = 0  # fallback to sentence-only
+
 # ──────────────────────────────  Helper functions  ──────────────────────────────
 
 def classify_sentence_with_context(index: int, sentences: list[str], window_size: int, kw_dict: dict) -> str:
@@ -154,10 +172,11 @@ if not {"shortcode", "caption"}.issubset(raw_df.columns):
 
 if st.sidebar.button("⚙️  Transform"):
     with st.spinner("Processing …"):
-        final_df = process_dataframe(raw_df, keyword_dict, window_size=1)
+        final_df = process_dataframe(raw_df, keyword_dict, window_size=window_size)
 
     st.success("Processing complete!")
     st.subheader("Preview of processed data")
+    st.caption(f"Rolling context window: {'Enabled' if use_context else 'Disabled'}, size = {window_size}")
     st.dataframe(final_df, use_container_width=True)
 
     buff = StringIO()
