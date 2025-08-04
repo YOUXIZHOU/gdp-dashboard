@@ -120,7 +120,9 @@ def classify_sentence_with_context(index: int, sentences: list[str], window_size
     return "Uncategorized"
 
 def process_dataframe(df: pd.DataFrame, id_col: str, text_col: str, kw_dict: dict, window_size: int, include_hashtags: bool) -> pd.DataFrame:
+    # 保留其他欄位
     df = df.rename(columns={id_col: "ID", text_col: "Context"})
+    other_columns = [col for col in df.columns if col not in ["ID", "Context"]]
     rows = []
     for _, row in df.iterrows():
         pattern = r"(?<=[.!?])\s+"
@@ -131,16 +133,18 @@ def process_dataframe(df: pd.DataFrame, id_col: str, text_col: str, kw_dict: dic
         cleaned = [s for s in cleaned if s and not re.fullmatch(r"[.!?]+", s)]
         for i, s in enumerate(cleaned, start=1):
             category = classify_sentence_with_context(i - 1, cleaned, window_size, kw_dict)
-            rows.append(
-                {
-                    "ID": row["ID"],
-                    "Context": row["Context"],
-                    "Sentence ID": i,
-                    "Statement": s,
-                    "Category": category,
-                }
-            )
+            row_data = {
+                "ID": row["ID"],
+                "Context": row["Context"],
+                "Sentence ID": i,
+                "Statement": s,
+                "Category": category,
+            }
+            for col in other_columns:
+                row_data[col] = row[col]
+            rows.append(row_data)
     return pd.DataFrame(rows)
+
 
 # ──────────────────────────────  How to Use  ──────────────────────────────
 
