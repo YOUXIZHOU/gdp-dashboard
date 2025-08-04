@@ -10,7 +10,7 @@ st.set_page_config(
     page_title="Text Transformation App",
     page_icon="📝",
     layout="wide",
-    initial_sidebar_state=""expanded",
+    initial_sidebar_state="expanded",
 )
 
 # Inject CSS for centered title and compact padding
