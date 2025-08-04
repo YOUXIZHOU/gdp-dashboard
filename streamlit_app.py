@@ -105,6 +105,7 @@ if use_context:
 else:
     window_size = 0
 
+# CSV‑based column selection
 include_hashtags = st.sidebar.checkbox("Treat hashtags as separate sentences", value=True)
 
 # ──────────────────────────────  Helper functions  ──────────────────────────────
@@ -149,6 +150,8 @@ def process_dataframe(df: pd.DataFrame, id_col: str, text_col: str, kw_dict: dic
             rows.append(row_data)
     return pd.DataFrame(rows)
 
+
+
 # ──────────────────────────────  How to Use  ──────────────────────────────
 
 st.markdown(
@@ -181,7 +184,6 @@ if st.sidebar.button("⚙️  Transform"):
     st.success("Processing complete!")
     st.subheader("Preview of processed data")
     st.caption(f"Rolling context window: {'Enabled' if use_context else 'Disabled'}, size = {window_size}")
-    
     st.dataframe(final_df, use_container_width=True)
 
     buff = StringIO()
@@ -189,4 +191,6 @@ if st.sidebar.button("⚙️  Transform"):
     st.download_button(
         "💾  Download CSV",
         data=buff.getvalue(),
-        mim
+        mime="text/csv",
+        file_name="transformed_text.csv",
+    )
