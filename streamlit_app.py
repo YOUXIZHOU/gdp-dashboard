@@ -10,23 +10,20 @@ st.set_page_config(
     page_title="Text Transformation App",
     page_icon="📝",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state=""expanded",
 )
 
 # Inject CSS for centered title and compact padding
 st.markdown(
     """
     <style>
-        /* ─── Hero title ─── */
         .block-container h1:first-child {
             text-align: center;
             font-size: 3rem;
             font-weight: 800;
             margin-bottom: 1.25rem;
         }
-        /* ─── Compact top padding ─── */
         .block-container { padding-top: 1.2rem; }
-        /* ─── Sidebar header size ─── */
         section[data-testid="stSidebar"] h2 {
             font-size: 1.05rem; margin-bottom: .3rem;
         }
@@ -45,9 +42,8 @@ DEFAULT_DICT = {
     "Fitness": ["workout", "fitness", "exercise", "gym", "training"],
 }
 
-# ──────────────────────────────  Sidebar  ──────────────────────────────
+# ──────────────────────────────  Sidebar ──────────────────────────────
 
-# 🔗 External tool links
 st.sidebar.markdown(
     """
     **🔗 Related Tools**  
@@ -91,9 +87,9 @@ st.sidebar.markdown(
     unsafe_allow_html=True,
 )
 
-# ──────────────────────────────  Context settings  ──────────────────────────────
+# ──────────────────────────────  Configurations  ──────────────────────────────
 st.sidebar.markdown("---")
-st.sidebar.header("3️⃣  Context Options")
+st.sidebar.header("3️⃣  Configurations")
 
 use_context = st.sidebar.checkbox("Use rolling context window", value=True)
 
@@ -107,12 +103,16 @@ if use_context:
         help="How many sentences before and after to include when classifying."
     )
 else:
-    window_size = 0  # fallback to sentence-only
+    window_size = 0
+
+# CSV‑based column selection
+id_column = st.sidebar.selectbox("Select ID column", options=[], disabled=True)
+context_column = st.sidebar.selectbox("Select Context column", options=[], disabled=True)
+include_hashtags = st.sidebar.checkbox("Treat hashtags as separate sentences", value=True)
 
 # ──────────────────────────────  Helper functions  ──────────────────────────────
 
 def classify_sentence_with_context(index: int, sentences: list[str], window_size: int, kw_dict: dict) -> str:
-    """Classify a sentence using a rolling context window (surrounding sentences)."""
     start = max(0, index - window_size)
     end = min(len(sentences), index + window_size + 1)
     context_chunk = " ".join(sentences[start:end]).lower()
@@ -121,20 +121,14 @@ def classify_sentence_with_context(index: int, sentences: list[str], window_size
             return cat
     return "Uncategorized"
 
-def classify_sentence(text: str, kw_dict: dict) -> str:
-    """Original single-sentence classification (preserved)."""
-    text_lower = text.lower()
-    for cat, kws in kw_dict.items():
-        if any(k.lower() in text_lower for k in kws):
-            return cat
-    return "Uncategorized"
-
-def process_dataframe(df: pd.DataFrame, kw_dict: dict, window_size: int = 1) -> pd.DataFrame:
-    """Split captions into sentences ➜ classify using context ➜ build transformed DataFrame."""
-    df = df.rename(columns={"shortcode": "ID", "caption": "Context"})
+def process_dataframe(df: pd.DataFrame, id_col: str, text_col: str, kw_dict: dict, window_size: int, include_hashtags: bool) -> pd.DataFrame:
+    df = df.rename(columns={id_col: "ID", text_col: "Context"})
     rows = []
     for _, row in df.iterrows():
-        sentences = re.split(r"(?<=[.!?])\s+|(?=#[^\s]+)", str(row["Context"]))
+        pattern = r"(?<=[.!?])\s+"
+        if include_hashtags:
+            pattern += r"|(?=#[^\s]+)"
+        sentences = re.split(pattern, str(row["Context"]))
         cleaned = [re.sub(r"\s+", " ", s.strip()) for s in sentences]
         cleaned = [s for s in cleaned if s and not re.fullmatch(r"[.!?]+", s)]
         for i, s in enumerate(cleaned, start=1):
@@ -161,14 +155,6 @@ st.markdown(
 4. **Configure options** – Choose whether to include hashtags as separate sentences  
 5. **Click _Transform_** – Process your data into sentence‑level format  
 6. **Download results** – Get your transformed data as a CSV file  
-
-### Output Format
-The transformed data will have the following columns:
-
-- **ID**: The identifier from your selected ID column  
-- **Sentence ID**: Sequential number for each sentence within a record  
-- **Context**: The original text from your Context column  
-- **Statement**: Individual sentences extracted from the context  
     """
 )
 
@@ -179,13 +165,13 @@ if uploaded_file is None:
 
 raw_df = pd.read_csv(uploaded_file)
 
-if not {"shortcode", "caption"}.issubset(raw_df.columns):
-    st.error("CSV must contain `shortcode` and `caption` columns.")
-    st.stop()
+# Enable column selection once CSV is loaded
+id_column = st.sidebar.selectbox("Select ID column", options=raw_df.columns.tolist(), index=0)
+context_column = st.sidebar.selectbox("Select Context column", options=raw_df.columns.tolist(), index=1)
 
 if st.sidebar.button("⚙️  Transform"):
     with st.spinner("Processing …"):
-        final_df = process_dataframe(raw_df, keyword_dict, window_size=window_size)
+        final_df = process_dataframe(raw_df, id_column, context_column, keyword_dict, window_size, include_hashtags)
 
     st.success("Processing complete!")
     st.subheader("Preview of processed data")
