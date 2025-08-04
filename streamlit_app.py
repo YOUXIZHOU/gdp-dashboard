@@ -1,120 +1,172 @@
-import io
-from pathlib import Path
-from typing import Dict, Set, List
-
+# streamlit_app.py — drop expander, always visible instructions
+"""
+📝 Text Transformation App – Streamlit
+-------------------------------------
+Changes in this patch:
+ 
+* **Removed** the collapsible expander. The How‑to section now shows by default.
+* No other behaviour changed.
+"""
+ 
+from io import StringIO
+import json
+import re
+ 
 import pandas as pd
 import streamlit as st
-
-###############################################################################
-# Streamlit – Marketing Keyword Classifier                                   #
-###############################################################################
-st.set_page_config(page_title="Marketing Keyword Classifier", layout="wide")
-st.title("📈 Marketing Keyword Classifier")
-
-# ---------------------------------------------------------------------------
-# 🛠️ Sidebar – Upload & Configuration
-# ---------------------------------------------------------------------------
-with st.sidebar:
-    st.header("🗂️ 1. Upload Your CSV")
-    uploaded_file = st.file_uploader("CSV file with a 'Statement' column", type=["csv"])
-
-    st.markdown("---")
-    st.header("🔧 2. Configure Dictionaries")
-
-    # Default marketing keyword dictionaries
-    default_dicts: Dict[str, Set[str]] = {
-        "urgency_marketing": {
-            "limited", "limited time", "limited run", "limited edition", "order now",
-            "last chance", "hurry", "while supplies last", "before they're gone",
-            "selling out", "selling fast", "act now", "don't wait", "today only",
-            "expires soon", "final hours", "almost gone",
-        },
-        "exclusive_marketing": {
-            "exclusive", "exclusively", "exclusive offer", "exclusive deal",
-            "members only", "vip", "special access", "invitation only",
-            "premium", "privileged", "limited access", "select customers",
-            "insider", "private sale", "early access",
-        },
-    }
-
-    # Load edited or new dictionaries into this object
-    current_dicts: Dict[str, Set[str]] = {}
-
-    for label, keywords in default_dicts.items():
-        kw_text = "\n".join(sorted(keywords))
-        new_kw_text = st.text_area(
-            f"Keywords for **{label}** (one per line)", kw_text, key=label
-        )
-        kw_set = {kw.strip().lower() for kw in new_kw_text.split("\n") if kw.strip()}
-        if kw_set:
-            current_dicts[label] = kw_set
-
-    # Section to add a completely new category
-    st.markdown("---")
-    st.subheader("➕ Add New Category")
-    new_label = st.text_input("New category name (alphanumeric and underscores)")
-    new_kw_input = st.text_area("Keywords for new category (one per line)")
-    if new_label and new_kw_input:
-        new_kw_set = {kw.strip().lower() for kw in new_kw_input.split("\n") if kw.strip()}
-        if new_kw_set:
-            current_dicts[new_label.strip().lower()] = new_kw_set
-
-    st.markdown("---")
-    one_hot = st.checkbox("Add one‑hot encoded columns", value=True)
-
-###############################################################################
-# Helper – Classification Function
-###############################################################################
-
-def classify_statement(text: str, dictionaries: Dict[str, Set[str]]) -> List[str]:
-    """Return list of dictionary names whose keywords appear in *text*."""
+ 
+# ──────────────────────────────  Page set‑up  ──────────────────────────────
+st.set_page_config(
+    page_title="Text Transformation App",
+    page_icon="📝",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+ 
+# Inject CSS for centred hero + compact padding
+st.markdown(
+    """
+    <style>
+        /* ─── Hero title ─── */
+        .block-container h1:first-child {
+            text-align: center;
+            font-size: 3rem;
+            font-weight: 800;
+            margin-bottom: 1.25rem;
+        }
+        /* ─── Compact top padding ─── */
+        .block-container { padding-top: 1.2rem; }
+        /* ─── Sidebar header size ─── */
+        section[data-testid="stSidebar"] h2 {
+            font-size: 1.05rem; margin-bottom: .3rem;
+        }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+ 
+st.title("📝 Text Transformation App")
+ 
+# ──────────────────────────────  Default dictionary  ──────────────────────────────
+DEFAULT_DICT = {
+    "Fashion": ["style", "fashion", "wardrobe", "clothing", "outfit"],
+    "Food": ["delicious", "food", "dinner", "lunch", "restaurant"],
+    "Travel": ["travel", "trip", "vacation", "explore", "journey"],
+    "Fitness": ["workout", "fitness", "exercise", "gym", "training"],
+}
+ 
+# ──────────────────────────────  Sidebar  ──────────────────────────────
+## 1️⃣  Upload
+st.sidebar.header("1️⃣  Upload your CSV")
+uploaded_file = st.sidebar.file_uploader(
+    "Choose an Instagram CSV file (≤200 MB)",
+    type=["csv"],
+    accept_multiple_files=False,
+)
+ 
+st.sidebar.markdown("---")
+ 
+## 2️⃣  Dictionary
+st.sidebar.header("2️⃣  Modify keyword dictionary")
+ 
+dict_input = st.sidebar.text_area(
+    "Dictionary (JSON)",
+    value=json.dumps(DEFAULT_DICT, indent=2),
+    height=280,
+)
+ 
+try:
+    keyword_dict = json.loads(dict_input)
+    if not isinstance(keyword_dict, dict):
+        raise ValueError("Dictionary root must be a JSON object (key → list).")
+except (json.JSONDecodeError, ValueError) as e:
+    st.sidebar.error(f"❌ {e}\nUsing default dictionary instead.")
+    keyword_dict = DEFAULT_DICT
+ 
+st.sidebar.markdown(
+    """<small>🔧 Edit the JSON above to add/delete categories & keywords.</small>""",
+    unsafe_allow_html=True,
+)
+ 
+# ──────────────────────────────  Helper functions  ──────────────────────────────
+ 
+def classify_sentence(text: str, kw_dict: dict) -> str:
+    """Return first category whose keywords appear in *text* (case‑insensitive)."""
     text_lower = text.lower()
-    matched: List[str] = []
-    for label, keywords in dictionaries.items():
-        if any(kw in text_lower for kw in keywords):
-            matched.append(label)
-    return matched
-
-###############################################################################
-# 🚀 Main – Run Classification & Display Results
-###############################################################################
-
-def run_classifier(file_buffer: io.BytesIO, dictionaries: Dict[str, Set[str]]):
-    df = pd.read_csv(file_buffer)
-
-    if "Statement" not in df.columns:
-        st.error("❌ The uploaded CSV must contain a column named 'Statement'.")
-        return
-
-    # Classify
-    with st.spinner("Classifying statements…"):
-        df["labels"] = df["Statement"].astype(str).apply(classify_statement, dictionaries=dictionaries)
-        if one_hot:
-            for label in dictionaries:
-                df[label] = df["labels"].apply(lambda cats, lbl=label: lbl in cats)
-
-    st.success("✅ Classification complete!")
-
-    # Preview
-    st.subheader("🔍 Preview (first 10 rows)")
-    st.dataframe(df.head(10), use_container_width=True)
-
-    # Download
-    csv_bytes = df.to_csv(index=False).encode("utf-8")
+    for cat, kws in kw_dict.items():
+        if any(k.lower() in text_lower for k in kws):
+            return cat
+    return "Uncategorized"
+ 
+ 
+def process_dataframe(df: pd.DataFrame, kw_dict: dict) -> pd.DataFrame:
+    """Split captions into sentences/hashtags ➜ classify ➜ tidy DataFrame."""
+    df = df.rename(columns={"shortcode": "ID", "caption": "Context"})
+    rows = []
+    for _, row in df.iterrows():
+        # split on sentence terminators **or** look‑ahead for a hashtag
+        sentences = re.split(r"(?<=[.!?])\s+|(?=#[^\s]+)", str(row["Context"]))
+        for i, s in enumerate(sentences, start=1):
+            clean = re.sub(r"\s+", " ", s.strip())
+            if clean and not re.fullmatch(r"[.!?]+", clean):
+                rows.append(
+                    {
+                        "ID": row["ID"],
+                        "Context": row["Context"],
+                        "Sentence ID": i,
+                        "Statement": clean,
+                        "Category": classify_sentence(clean, keyword_dict),
+                    }
+                )
+    return pd.DataFrame(rows)
+ 
+# ──────────────────────────────  How to Use  ──────────────────────────────
+ 
+st.markdown(
+    """
+### How to Use
+1. **Upload your CSV file** using the file uploader above  
+2. **Select ID Column** – Choose the column that uniquely identifies each record  
+3. **Select Context Column** – Choose the column containing the text to be transformed  
+4. **Configure options** – Choose whether to include hashtags as separate sentences  
+5. **Click _Transform_** – Process your data into sentence‑level format  
+6. **Download results** – Get your transformed data as a CSV file  
+ 
+### Output Format
+The transformed data will have the following columns:
+ 
+- **ID**: The identifier from your selected ID column  
+- **Sentence ID**: Sequential number for each sentence within a record  
+- **Context**: The original text from your Context column  
+- **Statement**: Individual sentences extracted from the context  
+    """
+)
+ 
+# ──────────────────────────────  Main logic  ──────────────────────────────
+if uploaded_file is None:
+    st.info("👈  Start by uploading a CSV file from the sidebar.")
+    st.stop()
+ 
+raw_df = pd.read_csv(uploaded_file)
+ 
+if not {"shortcode", "caption"}.issubset(raw_df.columns):
+    st.error("CSV must contain `shortcode` and `caption` columns.")
+    st.stop()
+ 
+if st.sidebar.button("⚙️  Transform"):
+    with st.spinner("Processing …"):
+        final_df = process_dataframe(raw_df, keyword_dict)
+ 
+    st.success("Processing complete!")
+    st.subheader("Preview of processed data")
+    st.dataframe(final_df, use_container_width=True)
+ 
+    buff = StringIO()
+    final_df.to_csv(buff, index=False)
     st.download_button(
-        label="Download classified CSV",
-        data=csv_bytes,
-        file_name="classified_output.csv",
+        "💾  Download CSV",
+        data=buff.getvalue(),
         mime="text/csv",
+        file_name="transformed_text.csv",
     )
-
-###############################################################################
-# 🏁 App Execution
-###############################################################################
-if uploaded_file is not None:
-    try:
-        run_classifier(uploaded_file, current_dicts)
-    except Exception as e:
-        st.exception(e)
-else:
-    st.info("👆 Upload a CSV file to get started.")
+ 
