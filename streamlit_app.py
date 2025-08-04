@@ -47,10 +47,10 @@ DEFAULT_DICT = {
 st.sidebar.markdown(
     """
     **🔗 Related Tools**  
-    • [Dictionary Refinement](https://claude.ai/public/artifacts/d537c8ac-0fe2-49f9-80df-157b753fd783)  
-    • [Classification](https://gdp-dashboard-54gvj7gbgcw.streamlit.app/)  
+    • [Dictionary Refinement](https://claude.ai/public/artifacts/f401602a-2504-4e8e-b906-a9bc484cee31)  
+    • [Classification](https://dictionary-classification-exuebwieyg4bj3xqkbkqkw.streamlit.app/)  
     • [Join table](https://claude.ai/public/artifacts/e6d1678e-eaaf-41db-8a18-16f89f778f36)  
-    • [Word Metrics](https://claude.ai/public/artifacts/f4358b58-5f90-43f3-a8b2-43e0c6f1b0d7)  
+    • [Word Metrics](https://word-metrics-bntqbb4mxfs7mhb6tgqyud.streamlit.app/)  
     """,
     unsafe_allow_html=True,
 )
