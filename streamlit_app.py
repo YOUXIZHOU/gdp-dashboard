@@ -120,9 +120,13 @@ def classify_sentence_with_context(index: int, sentences: list[str], window_size
     return "Uncategorized"
 
 def process_dataframe(df: pd.DataFrame, id_col: str, text_col: str, kw_dict: dict, window_size: int, include_hashtags: bool) -> pd.DataFrame:
-    # 保留其他欄位
     df = df.rename(columns={id_col: "ID", text_col: "Context"})
-    other_columns = [col for col in df.columns if col not in ["ID", "Context"]]
+    
+    optional_columns = []
+    for col in ["Likes", "Comments"]:
+        if col in df.columns:
+            optional_columns.append(col)
+
     rows = []
     for _, row in df.iterrows():
         pattern = r"(?<=[.!?])\s+"
@@ -140,10 +144,11 @@ def process_dataframe(df: pd.DataFrame, id_col: str, text_col: str, kw_dict: dic
                 "Statement": s,
                 "Category": category,
             }
-            for col in other_columns:
+            for col in optional_columns:
                 row_data[col] = row[col]
             rows.append(row_data)
     return pd.DataFrame(rows)
+
 
 
 # ──────────────────────────────  How to Use  ──────────────────────────────
