@@ -122,8 +122,9 @@ def classify_sentence_with_context(index: int, sentences: list[str], window_size
 def process_dataframe(df: pd.DataFrame, id_col: str, text_col: str, kw_dict: dict, window_size: int, include_hashtags: bool) -> pd.DataFrame:
     df = df.rename(columns={id_col: "ID", text_col: "Context"})
     
+    # 只保留 number_likes 和 number_comments（如果存在）
     optional_columns = []
-    for col in ["Likes", "Comments"]:
+    for col in ["number_likes", "number_comments"]:
         if col in df.columns:
             optional_columns.append(col)
 
