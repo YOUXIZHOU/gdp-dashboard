@@ -105,7 +105,6 @@ if use_context:
 else:
     window_size = 0
 
-# CSV‑based column selection
 include_hashtags = st.sidebar.checkbox("Treat hashtags as separate sentences", value=True)
 
 # ──────────────────────────────  Helper functions  ──────────────────────────────
@@ -122,7 +121,7 @@ def classify_sentence_with_context(index: int, sentences: list[str], window_size
 def process_dataframe(df: pd.DataFrame, id_col: str, text_col: str, kw_dict: dict, window_size: int, include_hashtags: bool) -> pd.DataFrame:
     df = df.rename(columns={id_col: "ID", text_col: "Context"})
     
-    # 只保留 number_likes 和 number_comments（如果存在）
+    # Only keep number_likes and number_comments if they exist
     optional_columns = []
     for col in ["number_likes", "number_comments"]:
         if col in df.columns:
@@ -149,8 +148,6 @@ def process_dataframe(df: pd.DataFrame, id_col: str, text_col: str, kw_dict: dic
                 row_data[col] = row[col]
             rows.append(row_data)
     return pd.DataFrame(rows)
-
-
 
 # ──────────────────────────────  How to Use  ──────────────────────────────
 
@@ -184,7 +181,18 @@ if st.sidebar.button("⚙️  Transform"):
     st.success("Processing complete!")
     st.subheader("Preview of processed data")
     st.caption(f"Rolling context window: {'Enabled' if use_context else 'Disabled'}, size = {window_size}")
+    
     st.dataframe(final_df, use_container_width=True)
+
+    # Prevent duplicate Streamlit widget key errors if rendering text areas
+    for i, row in final_df.iterrows():
+        st.text_area(
+            label="",
+            value=row["Statement"],
+            height=80,
+            disabled=True,
+            key=f"text_area_{row['ID']}_{i}"  # key must be unique
+        )
 
     buff = StringIO()
     final_df.to_csv(buff, index=False)
