@@ -53,7 +53,7 @@ st.sidebar.markdown(
     **🔗 Related Tools**  
     • [Dictionary Refinement](https://claude.ai/public/artifacts/d537c8ac-0fe2-49f9-80df-157b753fd783)  
     • [Classification](https://gdp-dashboard-54gvj7gbgcw.streamlit.app/)  
-    • [Join table](https://claude.ai/public/artifacts/5e43a6e5-bbbd-4d9f-a906-e9c25b264e5c)  
+    • [Join table](https://claude.ai/public/artifacts/e6d1678e-eaaf-41db-8a18-16f89f778f36)  
     • [Word Metrics](https://claude.ai/public/artifacts/f4358b58-5f90-43f3-a8b2-43e0c6f1b0d7)  
     """,
     unsafe_allow_html=True,
