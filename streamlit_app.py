@@ -106,8 +106,6 @@ else:
     window_size = 0
 
 # CSV‑based column selection
-id_column = st.sidebar.selectbox("Select ID column", options=[], disabled=True)
-context_column = st.sidebar.selectbox("Select Context column", options=[], disabled=True)
 include_hashtags = st.sidebar.checkbox("Treat hashtags as separate sentences", value=True)
 
 # ──────────────────────────────  Helper functions  ──────────────────────────────
